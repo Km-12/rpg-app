@@ -1,7 +1,7 @@
 # 宝探しゲーム
 
 ## 概要
-https://km-12.github.io/rpg-app/
+https://km-12.github.io/rpg-app/  
 「宝探しゲーム」は、Pythonのゲームライブラリ**Pyxel**を使って作成したゲームです。プレイヤーは宝箱を見つけるとゲームクリアです。
 
 ## 操作方法
