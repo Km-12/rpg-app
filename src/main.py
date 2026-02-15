@@ -96,7 +96,48 @@ class Player:
             v = 48
 
         pyxel.blt(self.player_pos[0], self.player_pos[1], 0, v, frame_u, self.w, self.h, 13)
-        
+
+class Enemy:
+    # Enemyの初期化
+    def __init__(self, x, y, move_type="vertical"):
+        # 初期位置
+        self.x = x
+        self.y = y
+        self.w = 16
+        self.h = 16
+
+        self.speed = 1.2
+        self.direction = 1
+        self.move_range = 16
+        self.start_x = x
+        self.start_y = y
+    
+        self.move_type = move_type
+
+    def update(self):
+        # 上下移動
+        if self.move_type == "vertical":
+            self.y += self.speed * self.direction
+
+            # 指定範囲の移動
+            if self.y > self.start_y + self.move_range:
+                self.direction = -1
+            elif self.y < self.start_y - self.move_range:
+                self.direction = 1
+
+        # 左右移動
+        elif self.move_type == "horizontal":
+            self.x += self.speed * self.direction
+
+            if self.x > self.start_x + self.move_range:
+                self.x = self.start_x + self.move_range
+                self.direction = -1
+            elif self.x < self.start_x - self.move_range:
+                self.x = self.start_x - self.move_range
+                self.direction = 1
+
+    def draw(self):
+            pyxel.blt(self.x, self.y, 0, 0, 96, self.w, self.h, 13)
 
 class Key:
     # Keyの初期化
@@ -163,6 +204,8 @@ class App:
 
         self.player = Player(8, 32)
 
+        self.enemies = [Enemy(172, 64, "vertical"), Enemy(182, 156, "horizontal")]
+
         self.key = Key(8, 8)
         self.fake_key = FakeKey(228, 98)
         self.box = Box(8, 200)
@@ -197,6 +240,31 @@ class App:
             a.player_pos[1] < b.y + b.h and
             a.player_pos[1] + a.h > b.y
         )
+    
+    def handle_stairs(self):
+        # ステージ１、ステージ２で階段に乗った場合
+        if self.mapmode == "stage_one":
+            if self.player.on_target_tile_one(self.map_x) and not self.on_stairs:
+                # マップ切り替え
+                self.mapmode = "stage_two"
+                self.map_x = 256
+                self.map_y = 0
+                self.player.player_pos = [232, 16]
+                self.on_stairs = True
+
+        elif self.mapmode == "stage_two":
+            if self.player.on_target_tile_two(self.map_x) and not self.on_stairs:
+                # マップ切り替え
+                self.mapmode = "stage_one"
+                self.map_x = 0
+                self.map_y = 0
+                self.player.player_pos = [232, 200]
+                self.on_stairs = True
+
+        # 階段から降りたらリセット
+        if not (self.player.on_target_tile_one(self.map_x)
+                or self.player.on_target_tile_two(self.map_x)):
+            self.on_stairs = False
 
     def update(self):
         mx = pyxel.mouse_x
@@ -209,10 +277,10 @@ class App:
             
             if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
                 # はじめる
-                if 30 <= mx <= 68 and 80 <= my <= 88:
+                if 40 <= mx <= 120 and 90 <= my <= 100:
                     self.state = "game"
                 # おわる
-                elif 105 <= mx <=132 and 80 <= my <= 88:
+                elif 170 <= mx <= 220 and 90 <= my <= 100:
                     pyxel.quit()
     
         # --- ゲーム画面 ---
@@ -222,46 +290,36 @@ class App:
 
             self.player.update(self.mapmode, self.map_x)
 
-            # 鍵の当たり判定
-            if not self.key.taken and self.check_collision(self.player, self.key):
-                self.player.key_count += 1
-                self.key.taken = True
-
-            # 当たり宝箱の当たり判定
-            if self.player.key_count == 1 and self.check_collision(self.player, self.box):
-                self.state = "clear"
-
-            # 偽宝箱の当たり判定
-            if self.check_collision(self.player, self.fake_box):
-                self.state = "over"
-
-            # 偽鍵の当たり判定
-            if self.check_collision(self.player, self.fake_key):
-                self.state = "over"
-
-            # ステージ１、ステージ２で階段に乗った場合
+            # ステージ別 当たり判定処理
             if self.mapmode == "stage_one":
-                if self.player.on_target_tile_one(self.map_x) and not self.on_stairs:
-                    # マップ切り替え
-                    self.mapmode = "stage_two"
-                    self.map_x = 256
-                    self.map_y = 0
-                    self.player.player_pos = [232, 16]
-                    self.on_stairs = True
+                for enemy in self.enemies:
+                    enemy.update()
+
+                    # 敵の当たり判定
+                    if self.check_collision(self.player, enemy):
+                        self.state = "over"
+                        break
 
             elif self.mapmode == "stage_two":
-                if self.player.on_target_tile_two(self.map_x) and not self.on_stairs:
-                    # マップ切り替え
-                    self.mapmode = "stage_one"
-                    self.map_x = 0
-                    self.map_y = 0
-                    self.player.player_pos = [232, 200]
-                    self.on_stairs = True
+                # 鍵の当たり判定
+                if not self.key.taken and self.check_collision(self.player, self.key):
+                    self.player.key_count += 1
+                    self.key.taken = True
 
-            # 階段から降りたらリセット
-            if not (self.player.on_target_tile_one(self.map_x)
-                    or self.player.on_target_tile_two(self.map_x)):
-                self.on_stairs = False
+                # 当たり宝箱の当たり判定
+                if self.player.key_count == 1 and self.check_collision(self.player, self.box):
+                    self.state = "clear"
+
+                # 偽宝箱の当たり判定
+                if self.check_collision(self.player, self.fake_box):
+                    self.state = "over"
+
+                # 偽鍵の当たり判定
+                if self.check_collision(self.player, self.fake_key):
+                    self.state = "over"
+
+            # ステージ別の階段移動処理
+            self.handle_stairs()
 
         # --- クリア画面 ---
         elif self.state == "clear":
@@ -270,10 +328,10 @@ class App:
             
             if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
                 # もういちど
-                if 30 <= mx <= 68 and 80 <= my <= 88:
+                if 40 <= mx <= 120 and 90 <= my <= 100:
                     self.reset_game()
                 # おわる
-                elif 105 <= mx <=132 and 80 <= my <= 88:
+                elif 170 <= mx <= 220 and 90 <= my <= 100:
                     pyxel.quit()
 
         # --- ゲームオーバー画面 ---
@@ -283,36 +341,39 @@ class App:
             
             if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
                 # もういちど
-                if 30 <= mx <= 68 and 80 <= my <= 88:
+                if 40 <= mx <= 120 and 90 <= my <= 100:
                     self.reset_game()
                 # おわる
-                elif 105 <= mx <=132 and 80 <= my <= 88:
+                elif 170 <= mx <= 220 and 90 <= my <= 100:
                     pyxel.quit()
 
     def draw(self):
         pyxel.cls(0)
 
         if self.state == "start":
-            pyxel.text(100, 40, "宝探しゲーム", 10, self.font)
-            pyxel.text(30, 80, "はじめる", 7, self.font)
-            pyxel.text(105, 80, "やめる", 7, self.font)
+            pyxel.text(100, 30, "宝探しゲーム", 10, self.font)  
+            pyxel.text(40, 90, "はじめる", 7, self.font)
+            pyxel.text(170, 90, "やめる", 7, self.font)
 
         elif self.state == "game":
             pyxel.bltm(0, 0, 0, self.map_x, self.map_y, 256, 224)
             self.player.draw()
-            if self.mapmode == "stage_two":
+            if self.mapmode == "stage_one":
+              for enemy in self.enemies:
+                enemy.draw()          
+            elif self.mapmode == "stage_two":
               self.key.draw()
               self.box.draw()
               self.fake_key.draw()
               self.fake_box.draw()
 
         if self.state == "clear":
-            pyxel.text(100, 40, "ゲーム クリア！", 10, self.font)
-            pyxel.text(30, 80, "もういちど", 7, self.font)
-            pyxel.text(105, 80, "やめる", 7, self.font)
+            pyxel.text(100, 30, "ゲーム クリア！", 10, self.font)
+            pyxel.text(40, 90, "もういちど", 7, self.font)
+            pyxel.text(170, 90, "やめる", 7, self.font)
    
         if self.state == "over":
-            pyxel.text(100, 40, "ゲーム オーバー！", 10, self.font)
-            pyxel.text(30, 80, "もういちど", 7, self.font)
-            pyxel.text(105, 80, "やめる", 7, self.font)     
+            pyxel.text(95, 30, "ゲーム オーバー！", 10, self.font)
+            pyxel.text(40, 90, "もういちど", 7, self.font)
+            pyxel.text(170, 90, "やめる", 7, self.font)  
 App()
